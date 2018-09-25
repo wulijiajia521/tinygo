@@ -1135,7 +1135,7 @@ func (c *Compiler) parseFunc(frame *Frame) error {
 	if !frame.fn.IsExported() {
 		frame.fn.LLVMFn.SetLinkage(llvm.InternalLinkage)
 	}
-	if frame.fn.IsInterrupt() && strings.HasPrefix(c.triple, "avr") {
+	if frame.fn.IsInterrupt() && strings.HasPrefix(c.Triple, "avr") {
 		frame.fn.LLVMFn.SetFunctionCallConv(85) // CallingConv::AVR_SIGNAL
 	}
 
