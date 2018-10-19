@@ -24,7 +24,7 @@ func start() {
 	initAll()
 }
 
-//go:export main
+//go:export cwa_main
 func main() {
 	mainWrapper()
 }

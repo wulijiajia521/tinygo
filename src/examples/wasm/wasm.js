@@ -34,7 +34,7 @@ function init() {
   WebAssembly.instantiateStreaming(fetch(WASM_URL), importObject).then(function(obj) {
     wasm = obj.instance;
     wasm.exports._start()
-    wasm.exports.main();
+    wasm.exports.cwa_main();
     updateResult();
   })
 }
