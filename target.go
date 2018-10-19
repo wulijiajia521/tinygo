@@ -38,7 +38,7 @@ func LoadTarget(target, ext string) (*TargetSpec, error) {
 			Triple:      "wasm32-unknown-unknown-wasm",
 			BuildTags:   []string{"js", "wasm"},
 			Linker:      "ld.lld-7",
-			PreLinkArgs: []string{"-flavor", "wasm"},
+			PreLinkArgs: []string{"-flavor", "wasm", "-allow-undefined-file", "targets/wasm.syms"},
 		}, nil
 	}
 	if target == "" {

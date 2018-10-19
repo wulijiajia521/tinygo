@@ -10,9 +10,32 @@ var timestamp timeUnit
 
 var line []byte
 
+const (
+	logLevelError   = 1
+	logLevelWarning = 3
+	logLevelInfo    = 6
+)
+
+// CommonWA: log_write
+func _Cfunc_log_write(level int32, ptr *uint8, len int32)
+
 //go:export _start
 func start() {
+	initAll()
 }
+
+//go:export main
+func main() {
+	mainWrapper()
+}
+
+//go:linkname _writeLog runtime.writeLog
+func _writeLog(level int32, ptr *uint8, len, cap lenType) {
+	_Cfunc_log_write(level, ptr, int32(len))
+}
+
+// hack around slice types
+func writeLog(level int32, line []byte)
 
 func putchar(c byte) {
 	switch c {
@@ -20,6 +43,7 @@ func putchar(c byte) {
 		// ignore
 	case '\n':
 		// write line
+		writeLog(logLevelInfo, line)
 		line = line[:0]
 	default:
 		line = append(line, c)
