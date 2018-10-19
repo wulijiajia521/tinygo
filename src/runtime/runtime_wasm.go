@@ -10,6 +10,10 @@ var timestamp timeUnit
 
 var line []byte
 
+//go:export _start
+func start() {
+}
+
 func putchar(c byte) {
 	switch c {
 	case '\r':

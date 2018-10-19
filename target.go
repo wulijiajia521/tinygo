@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/aykevl/go-llvm"
 )
 
 // Target specification for a given target. Used for bare metal targets.
@@ -29,7 +31,20 @@ type TargetSpec struct {
 }
 
 // Load a target specification
-func LoadTarget(target string) (*TargetSpec, error) {
+func LoadTarget(target, ext string) (*TargetSpec, error) {
+	// Get default spec, depending on output extension.
+	if target == "wasm" || target == "" && ext == ".wasm" {
+		return &TargetSpec{
+			Triple:      "wasm32-unknown-unknown-wasm",
+			BuildTags:   []string{"js", "wasm"},
+			Linker:      "ld.lld-7",
+			PreLinkArgs: []string{"-flavor", "wasm"},
+		}, nil
+	}
+	if target == "" {
+		target = llvm.DefaultTargetTriple()
+	}
+
 	spec := &TargetSpec{
 		Triple:      target,
 		BuildTags:   []string{runtime.GOOS, runtime.GOARCH},
@@ -54,7 +69,7 @@ func LoadTarget(target string) (*TargetSpec, error) {
 		// Expected a 'file not found' error, got something else.
 		return nil, err
 	} else {
-		// No target spec available. This is fine.
+		// No target spec available. Use the default one.
 	}
 
 	return spec, nil

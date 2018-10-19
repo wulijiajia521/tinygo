@@ -72,7 +72,7 @@ func runTest(path, tmpdir string, target string, t *testing.T) {
 	if target == "" {
 		cmd = exec.Command(binary)
 	} else {
-		spec, err := LoadTarget(target)
+		spec, err := LoadTarget(target, "")
 		if err != nil {
 			t.Fatal("failed to load target spec:", err)
 		}

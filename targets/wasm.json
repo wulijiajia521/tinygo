@@ -1,4 +1,0 @@
-{
-	"llvm-target": "wasm32-unknown-unknown-wasm",
-	"build-tags": ["js", "wasm"]
-}
