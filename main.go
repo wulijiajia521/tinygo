@@ -182,7 +182,7 @@ func Compile(pkgName, outpath, opt string, spec *TargetSpec, printIR, dumpSSA, d
 }
 
 func Build(pkgName, outpath, target, opt string, printIR, dumpSSA, debug bool, printSizes string) error {
-	spec, err := LoadTarget(target, filepath.Ext(outpath))
+	spec, err := LoadTarget(target)
 	if err != nil {
 		return err
 	}
@@ -216,7 +216,7 @@ func Build(pkgName, outpath, target, opt string, printIR, dumpSSA, debug bool, p
 }
 
 func Flash(pkgName, target, opt, port string, printIR, dumpSSA, debug bool, printSizes string) error {
-	spec, err := LoadTarget(target, "")
+	spec, err := LoadTarget(target)
 	if err != nil {
 		return err
 	}
@@ -245,7 +245,7 @@ func Flash(pkgName, target, opt, port string, printIR, dumpSSA, debug bool, prin
 // Note: this command is expected to execute just before exiting, as it
 // modifies global state.
 func FlashGDB(pkgName, target, opt, port string, printIR, dumpSSA, ocdOutput bool, printSizes string) error {
-	spec, err := LoadTarget(target, "")
+	spec, err := LoadTarget(target)
 	if err != nil {
 		return err
 	}
@@ -347,7 +347,7 @@ func Run(pkgName string) error {
 
 // Compile and run the given program in an emulator.
 func Emulate(pkgName, target, opt string) error {
-	spec, err := LoadTarget(target, "")
+	spec, err := LoadTarget(target)
 	if err != nil {
 		return err
 	}
@@ -416,7 +416,11 @@ func main() {
 			usage()
 			os.Exit(1)
 		}
-		err := Build(flag.Arg(0), *outpath, *target, *opt, *printIR, *dumpSSA, !*nodebug, *printSize)
+		target := *target
+		if target == "" && filepath.Ext(*outpath) == ".wasm" {
+			target = "wasm"
+		}
+		err := Build(flag.Arg(0), *outpath, target, *opt, *printIR, *dumpSSA, !*nodebug, *printSize)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
@@ -444,7 +448,7 @@ func main() {
 			os.Exit(1)
 		}
 		var err error
-		if *target == "" || *target == "wasm" {
+		if *target == "" {
 			err = Run(flag.Arg(0))
 		} else {
 			err = Emulate(flag.Arg(0), *target, *opt)

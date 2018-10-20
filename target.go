@@ -31,11 +31,7 @@ type TargetSpec struct {
 }
 
 // Load a target specification
-func LoadTarget(target, ext string) (*TargetSpec, error) {
-	// Get default spec, depending on output extension.
-	if target == "" && ext == ".wasm" {
-		target = "wasm"
-	}
+func LoadTarget(target string) (*TargetSpec, error) {
 	if target == "" {
 		target = llvm.DefaultTargetTriple()
 	}
