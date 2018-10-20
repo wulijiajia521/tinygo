@@ -1,2 +1,4 @@
 _heap_start
-log_write
+
+io_get_stdout
+resource_write

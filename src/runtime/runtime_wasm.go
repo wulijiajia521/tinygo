@@ -8,46 +8,31 @@ const tickMicros = 1
 
 var timestamp timeUnit
 
-var line []byte
+// CommonWA: io_get_stdout
+func _Cfunc_io_get_stdout() int32
 
-const (
-	logLevelError   = 1
-	logLevelWarning = 3
-	logLevelInfo    = 6
-)
+// CommonWA: resource_write
+func _Cfunc_resource_write(id int32, ptr *uint8, len int32) int32
 
-// CommonWA: log_write
-func _Cfunc_log_write(level int32, ptr *uint8, len int32)
+var stdout int32
+
+func init() {
+	stdout = _Cfunc_io_get_stdout()
+}
 
 //go:export _start
-func start() {
+func _start() {
 	initAll()
 }
 
 //go:export cwa_main
-func main() {
+func start() {
+	initAll() // _start is not called by olin/cwa so has to be called here
 	mainWrapper()
 }
 
-//go:linkname _writeLog runtime.writeLog
-func _writeLog(level int32, ptr *uint8, len, cap lenType) {
-	_Cfunc_log_write(level, ptr, int32(len))
-}
-
-// hack around slice types
-func writeLog(level int32, line []byte)
-
 func putchar(c byte) {
-	switch c {
-	case '\r':
-		// ignore
-	case '\n':
-		// write line
-		writeLog(logLevelInfo, line)
-		line = line[:0]
-	default:
-		line = append(line, c)
-	}
+	_Cfunc_resource_write(stdout, &c, 1)
 }
 
 func sleepTicks(d timeUnit) {
