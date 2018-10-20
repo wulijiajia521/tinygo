@@ -33,13 +33,8 @@ type TargetSpec struct {
 // Load a target specification
 func LoadTarget(target, ext string) (*TargetSpec, error) {
 	// Get default spec, depending on output extension.
-	if target == "wasm" || target == "" && ext == ".wasm" {
-		return &TargetSpec{
-			Triple:      "wasm32-unknown-unknown-wasm",
-			BuildTags:   []string{"js", "wasm"},
-			Linker:      "ld.lld-7",
-			PreLinkArgs: []string{"-flavor", "wasm", "-allow-undefined-file", "targets/wasm.syms"},
-		}, nil
+	if target == "" && ext == ".wasm" {
+		target = "wasm"
 	}
 	if target == "" {
 		target = llvm.DefaultTargetTriple()

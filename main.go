@@ -444,7 +444,7 @@ func main() {
 			os.Exit(1)
 		}
 		var err error
-		if *target == "" {
+		if *target == "" || *target == "wasm" {
 			err = Run(flag.Arg(0))
 		} else {
 			err = Emulate(flag.Arg(0), *target, *opt)
