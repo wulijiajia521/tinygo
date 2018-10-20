@@ -26,7 +26,7 @@ func _start() {
 }
 
 //go:export cwa_main
-func start() {
+func cwa_main() {
 	initAll() // _start is not called by olin/cwa so has to be called here
 	mainWrapper()
 }
