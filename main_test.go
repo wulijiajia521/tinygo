@@ -38,10 +38,17 @@ func TestCompiler(t *testing.T) {
 		})
 	}
 
-	t.Log("running tests on the qemu target...")
+	t.Log("running tests on the QEMU target...")
 	for _, path := range matches {
 		t.Run(path, func(t *testing.T) {
 			runTest(path, tmpdir, "qemu", t)
+		})
+	}
+
+	t.Log("running tests on the WebAssembly target...")
+	for _, path := range matches {
+		t.Run(path, func(t *testing.T) {
+			runTest(path, tmpdir, "wasm", t)
 		})
 	}
 }
