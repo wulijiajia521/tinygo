@@ -1,4 +1,2 @@
-_heap_start
-
 io_get_stdout
 resource_write
