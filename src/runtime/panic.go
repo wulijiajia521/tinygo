@@ -15,6 +15,13 @@ func runtimePanic(msg string) {
 	abort()
 }
 
+// Try to recover a panicking goroutine.
+func _recover() interface{} {
+	// Deferred functions are currently not executed during panic, so there is
+	// no way this can return anything besides nil.
+	return nil
+}
+
 // Check for bounds in *ssa.Index, *ssa.IndexAddr and *ssa.Lookup.
 func lookupBoundsCheck(length lenType, index int) {
 	if index < 0 || index >= int(length) {
@@ -25,6 +32,13 @@ func lookupBoundsCheck(length lenType, index int) {
 // Check for bounds in *ssa.Slice.
 func sliceBoundsCheck(length lenType, low, high uint) {
 	if !(0 <= low && low <= high && high <= uint(length)) {
+		runtimePanic("slice out of range")
+	}
+}
+
+// Check for bounds in *ssa.Slice. Supports 64-bit indexes.
+func sliceBoundsCheckLong(length lenType, low, high uint64) {
+	if !(0 <= low && low <= high && high <= uint64(length)) {
 		runtimePanic("slice out of range")
 	}
 }

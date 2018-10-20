@@ -68,17 +68,15 @@ Not yet supported:
 
 ## Supported targets
 
-Most targets that are supported by LLVM should be supported by this compiler.
-This means amd64 (where most of the testing happens), ARM, and Cortex-M
-microcontrollers.
+The following architectures/systems are currently supported:
 
-The AVR platform (as used by the Arduino, for example) is also supported when
-support for it is enabled in LLVM. However, because it is a Harvard style
-architecture with different address spaces for code and data and because LLVM
-turns globals into const for you (moving them to
-[PROGMEM](https://www.nongnu.org/avr-libc/user-manual/pgmspace.html)) most real
-programs don't work unfortunately. This can be fixed but that can be difficult
-to do efficiently and hasn't been implemented yet.
+  * ARM (Cortex-M)
+  * AVR (Arduino Uno)
+  * Linux
+
+For more information, see [this list of targets and
+boards](https://tinygo.readthedocs.io/en/latest/targets.html). Pull requests for
+broader support are welcome!
 
 ## Analysis and optimizations
 
@@ -101,9 +99,56 @@ Implemented compiler passes:
   * Do basic dead code elimination of functions. This pass makes later passes
     better and probably improves compile time as well.
 
+## Scope
+
+Goals:
+
+  * Have very small binary sizes. Don't pay for what you don't use.
+  * Support for most common microcontroller boards.
+  * Be usable on the web using WebAssembly.
+  * Good CGo support, with no more overhead than a regular function call.
+  * Support most standard library packages and compile most Go code without
+    modification.
+
+Non-goals:
+
+  * Using more than one core.
+  * Be efficient while using zillions of goroutines. However, good goroutine
+    support is certainly a goal.
+  * Be as fast as `gc`. However, LLVM will probably be better at optimizing
+    certain things so TinyGo might actually turn out to be faster for number
+    crunching.
+  * Be able to compile every Go program out there.
+
 ## Building
 
 See the [installation instructions](https://tinygo.readthedocs.io/en/latest/installation.html).
+
+## Documentation
+
+Documentation is currently maintained on a [dedicated ReadTheDocs
+page](https://tinygo.readthedocs.io/en/latest/).
+
+## Contributing
+
+Patches are welcome!
+
+If you want to contribute, here are some suggestions:
+
+  * A long tail of small (and large) language features haven't been implemented
+    yet. In almost all cases, the compiler will show a `todo:` error from
+    `compiler/compiler.go` when you try to use it. You can try implementing it,
+    or open a bug report with a small code sample that fails to compile.
+  * Lots of targets/boards are still unsupported. Adding an architecture often
+    requires a few compiler changes, but if the architecture is supported you
+    can try implementing support for a new chip or board in `src/runtime`. For
+    details, see [this wiki entry on adding
+    archs/chips/boards](https://github.com/aykevl/tinygo/wiki/Adding-a-new-board).
+  * Microcontrollers have lots of peripherals and many don't have an
+    implementation yet in the `machine` package. Adding support for new
+    peripherals is very useful.
+  * Just raising bugs for things you'd like to see implemented is also a form of
+    contributing! It helps prioritization.
 
 ## License
 

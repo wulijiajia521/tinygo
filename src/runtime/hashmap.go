@@ -122,7 +122,7 @@ func hashmapSet(m *hashmap, key unsafe.Pointer, value unsafe.Pointer, hash uint3
 
 // Get the value of a specified key, or zero the value if not found.
 //go:nobounds
-func hashmapGet(m *hashmap, key unsafe.Pointer, value unsafe.Pointer, hash uint32, keyEqual func(x, y unsafe.Pointer, n uintptr) bool) {
+func hashmapGet(m *hashmap, key unsafe.Pointer, value unsafe.Pointer, hash uint32, keyEqual func(x, y unsafe.Pointer, n uintptr) bool) bool {
 	numBuckets := uintptr(1) << m.bucketBits
 	bucketNumber := (uintptr(hash) & (numBuckets - 1))
 	bucketSize := unsafe.Sizeof(hashmapBucket{}) + uintptr(m.keySize)*8 + uintptr(m.valueSize)*8
@@ -147,7 +147,7 @@ func hashmapGet(m *hashmap, key unsafe.Pointer, value unsafe.Pointer, hash uint3
 				if keyEqual(key, slotKey, uintptr(m.keySize)) {
 					// Found the key, copy it.
 					memcpy(value, slotValue, uintptr(m.valueSize))
-					return
+					return true
 				}
 			}
 		}
@@ -156,6 +156,42 @@ func hashmapGet(m *hashmap, key unsafe.Pointer, value unsafe.Pointer, hash uint3
 
 	// Did not find the key.
 	memzero(value, uintptr(m.valueSize))
+	return false
+}
+
+// Delete a given key from the map. No-op when the key does not exist in the
+// map.
+//go:nobounds
+func hashmapDelete(m *hashmap, key unsafe.Pointer, hash uint32, keyEqual func(x, y unsafe.Pointer, n uintptr) bool) {
+	numBuckets := uintptr(1) << m.bucketBits
+	bucketNumber := (uintptr(hash) & (numBuckets - 1))
+	bucketSize := unsafe.Sizeof(hashmapBucket{}) + uintptr(m.keySize)*8 + uintptr(m.valueSize)*8
+	bucketAddr := uintptr(m.buckets) + bucketSize*bucketNumber
+	bucket := (*hashmapBucket)(unsafe.Pointer(bucketAddr))
+
+	tophash := uint8(hash >> 24)
+	if tophash < 1 {
+		// 0 means empty slot, so make it bigger.
+		tophash += 1
+	}
+
+	// Try to find the key.
+	for bucket != nil {
+		for i := uintptr(0); i < 8; i++ {
+			slotKeyOffset := unsafe.Sizeof(hashmapBucket{}) + uintptr(m.keySize)*uintptr(i)
+			slotKey := unsafe.Pointer(uintptr(unsafe.Pointer(bucket)) + slotKeyOffset)
+			if bucket.tophash[i] == tophash {
+				// This could be the key we're looking for.
+				if keyEqual(key, slotKey, uintptr(m.keySize)) {
+					// Found the key, delete it.
+					bucket.tophash[i] = 0
+					m.count--
+					return
+				}
+			}
+		}
+		bucket = bucket.next
+	}
 }
 
 // Iterate over a hashmap.
@@ -204,9 +240,14 @@ func hashmapBinarySet(m *hashmap, key, value unsafe.Pointer) {
 	hashmapSet(m, key, value, hash, memequal)
 }
 
-func hashmapBinaryGet(m *hashmap, key, value unsafe.Pointer) {
+func hashmapBinaryGet(m *hashmap, key, value unsafe.Pointer) bool {
 	hash := hashmapHash(key, uintptr(m.keySize))
-	hashmapGet(m, key, value, hash, memequal)
+	return hashmapGet(m, key, value, hash, memequal)
+}
+
+func hashmapBinaryDelete(m *hashmap, key unsafe.Pointer) {
+	hash := hashmapHash(key, uintptr(m.keySize))
+	hashmapDelete(m, key, hash, memequal)
 }
 
 // Hashmap with string keys (a common case).
@@ -225,7 +266,12 @@ func hashmapStringSet(m *hashmap, key string, value unsafe.Pointer) {
 	hashmapSet(m, unsafe.Pointer(&key), value, hash, hashmapStringEqual)
 }
 
-func hashmapStringGet(m *hashmap, key string, value unsafe.Pointer) {
+func hashmapStringGet(m *hashmap, key string, value unsafe.Pointer) bool {
 	hash := hashmapStringHash(key)
-	hashmapGet(m, unsafe.Pointer(&key), value, hash, hashmapStringEqual)
+	return hashmapGet(m, unsafe.Pointer(&key), value, hash, hashmapStringEqual)
+}
+
+func hashmapStringDelete(m *hashmap, key string) {
+	hash := hashmapStringHash(key)
+	hashmapDelete(m, unsafe.Pointer(&key), hash, hashmapStringEqual)
 }

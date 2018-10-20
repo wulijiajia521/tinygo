@@ -1077,7 +1077,7 @@ func (c *Compiler) getInterpretedValue(prefix string, value ir.Value) (llvm.Valu
 			constVal := key.(*ir.ConstValue).Expr
 			var keyBuf []byte
 			switch constVal.Type().Underlying().(*types.Basic).Kind() {
-			case types.String:
+			case types.String, types.UntypedString:
 				keyBuf = []byte(constant.StringVal(constVal.Value))
 			case types.Int:
 				keyBuf = make([]byte, c.targetData.TypeAllocSize(c.intType))
@@ -1559,28 +1559,7 @@ func (c *Compiler) parseInstr(frame *Frame, instr ssa.Instruction) error {
 			return err
 		}
 		mapType := instr.Map.Type().Underlying().(*types.Map)
-		switch keyType := mapType.Key().Underlying().(type) {
-		case *types.Basic:
-			valueAlloca := c.builder.CreateAlloca(value.Type(), "hashmap.value")
-			c.builder.CreateStore(value, valueAlloca)
-			valuePtr := c.builder.CreateBitCast(valueAlloca, c.i8ptrType, "hashmap.valueptr")
-			if keyType.Info()&types.IsString != 0 {
-				params := []llvm.Value{m, key, valuePtr}
-				c.createRuntimeCall("hashmapStringSet", params, "")
-				return nil
-			} else if keyType.Info()&(types.IsBoolean|types.IsInteger) != 0 {
-				keyAlloca := c.builder.CreateAlloca(key.Type(), "hashmap.key")
-				c.builder.CreateStore(key, keyAlloca)
-				keyPtr := c.builder.CreateBitCast(keyAlloca, c.i8ptrType, "hashmap.keyptr")
-				params := []llvm.Value{m, keyPtr, valuePtr}
-				c.createRuntimeCall("hashmapBinarySet", params, "")
-				return nil
-			} else {
-				return errors.New("todo: map update key type: " + keyType.String())
-			}
-		default:
-			return errors.New("todo: map update key type: " + keyType.String())
-		}
+		return c.emitMapUpdate(mapType.Key(), m, key, value)
 	case *ssa.Panic:
 		value, err := c.parseExpr(frame, instr.X)
 		if err != nil {
@@ -1718,6 +1697,16 @@ func (c *Compiler) parseBuiltin(frame *Frame, args []ssa.Value, callName string)
 		srcBuf = c.builder.CreateBitCast(srcBuf, c.i8ptrType, "copy.srcPtr")
 		elemSize := llvm.ConstInt(c.uintptrType, c.targetData.TypeAllocSize(elemType), false)
 		return c.createRuntimeCall("sliceCopy", []llvm.Value{dstBuf, srcBuf, dstLen, srcLen, elemSize}, "copy.n"), nil
+	case "delete":
+		m, err := c.parseExpr(frame, args[0])
+		if err != nil {
+			return llvm.Value{}, err
+		}
+		key, err := c.parseExpr(frame, args[1])
+		if err != nil {
+			return llvm.Value{}, err
+		}
+		return llvm.Value{}, c.emitMapDelete(args[1].Type(), m, key)
 	case "len":
 		value, err := c.parseExpr(frame, args[0])
 		if err != nil {
@@ -1755,7 +1744,7 @@ func (c *Compiler) parseBuiltin(frame *Frame, args []ssa.Value, callName string)
 			switch typ := typ.(type) {
 			case *types.Basic:
 				switch typ.Kind() {
-				case types.String:
+				case types.String, types.UntypedString:
 					c.createRuntimeCall("printstring", []llvm.Value{value}, "")
 				case types.Uintptr:
 					c.createRuntimeCall("printptr", []llvm.Value{value}, "")
@@ -1798,6 +1787,8 @@ func (c *Compiler) parseBuiltin(frame *Frame, args []ssa.Value, callName string)
 			c.createRuntimeCall("printnl", nil, "")
 		}
 		return llvm.Value{}, nil // print() or println() returns void
+	case "recover":
+		return c.createRuntimeCall("_recover", nil, ""), nil
 	case "ssa:wrapnilchk":
 		// TODO: do an actual nil check?
 		return c.parseExpr(frame, args[0])
@@ -2060,8 +2051,8 @@ func (c *Compiler) emitBoundsCheck(frame *Frame, arrayLen, index llvm.Value) {
 	}
 	// Optimize away trivial cases.
 	// LLVM would do this anyway with interprocedural optimizations, but it
-	// helps to see cases where bounds checking would really help.
-	if index.IsConstant() && arrayLen.IsConstant() {
+	// helps to see cases where bounds check elimination would really help.
+	if index.IsConstant() && arrayLen.IsConstant() && !arrayLen.IsUndef() {
 		index := index.SExtValue()
 		arrayLen := arrayLen.SExtValue()
 		if index >= 0 && index < arrayLen {
@@ -2069,6 +2060,26 @@ func (c *Compiler) emitBoundsCheck(frame *Frame, arrayLen, index llvm.Value) {
 		}
 	}
 	c.createRuntimeCall("lookupBoundsCheck", []llvm.Value{arrayLen, index}, "")
+}
+
+func (c *Compiler) emitSliceBoundsCheck(frame *Frame, length, low, high llvm.Value) {
+	if frame.fn.IsNoBounds() {
+		// The //go:nobounds pragma was added to the function to avoid bounds
+		// checking.
+		return
+	}
+
+	if low.Type().IntTypeWidth() > 32 || high.Type().IntTypeWidth() > 32 {
+		if low.Type().IntTypeWidth() < 64 {
+			low = c.builder.CreateSExt(low, c.ctx.Int64Type(), "")
+		}
+		if high.Type().IntTypeWidth() < 64 {
+			high = c.builder.CreateSExt(high, c.ctx.Int64Type(), "")
+		}
+		c.createRuntimeCall("sliceBoundsCheckLong", []llvm.Value{length, low, high}, "")
+	} else {
+		c.createRuntimeCall("sliceBoundsCheck", []llvm.Value{length, low, high}, "")
+	}
 }
 
 func (c *Compiler) parseExpr(frame *Frame, expr ssa.Value) (llvm.Value, error) {
@@ -2253,9 +2264,6 @@ func (c *Compiler) parseExpr(frame *Frame, expr ssa.Value) (llvm.Value, error) {
 			panic("unreachable")
 		}
 	case *ssa.Lookup:
-		if expr.CommaOk {
-			return llvm.Value{}, errors.New("todo: lookup with comma-ok")
-		}
 		value, err := c.parseExpr(frame, expr.X)
 		if err != nil {
 			return llvm.Value{}, nil
@@ -2267,7 +2275,7 @@ func (c *Compiler) parseExpr(frame *Frame, expr ssa.Value) (llvm.Value, error) {
 		switch xType := expr.X.Type().Underlying().(type) {
 		case *types.Basic:
 			// Value type must be a string, which is a basic type.
-			if xType.Kind() != types.String {
+			if xType.Info()&types.IsString == 0 {
 				panic("lookup on non-string?")
 			}
 
@@ -2284,31 +2292,11 @@ func (c *Compiler) parseExpr(frame *Frame, expr ssa.Value) (llvm.Value, error) {
 			bufPtr := c.builder.CreateGEP(buf, []llvm.Value{index}, "")
 			return c.builder.CreateLoad(bufPtr, ""), nil
 		case *types.Map:
-			switch keyType := xType.Key().Underlying().(type) {
-			case *types.Basic:
-				llvmValueType, err := c.getLLVMType(expr.Type())
-				if err != nil {
-					return llvm.Value{}, err
-				}
-				mapValueAlloca := c.builder.CreateAlloca(llvmValueType, "hashmap.value")
-				mapValuePtr := c.builder.CreateBitCast(mapValueAlloca, c.i8ptrType, "hashmap.valueptr")
-				if keyType.Info()&types.IsString != 0 {
-					params := []llvm.Value{value, index, mapValuePtr}
-					c.createRuntimeCall("hashmapStringGet", params, "")
-					return c.builder.CreateLoad(mapValueAlloca, ""), nil
-				} else if keyType.Info()&(types.IsBoolean|types.IsInteger) != 0 {
-					keyAlloca := c.builder.CreateAlloca(index.Type(), "hashmap.key")
-					c.builder.CreateStore(index, keyAlloca)
-					keyPtr := c.builder.CreateBitCast(keyAlloca, c.i8ptrType, "hashmap.keyptr")
-					params := []llvm.Value{value, keyPtr, mapValuePtr}
-					c.createRuntimeCall("hashmapBinaryGet", params, "")
-					return c.builder.CreateLoad(mapValueAlloca, ""), nil
-				} else {
-					return llvm.Value{}, errors.New("todo: map lookup key type: " + keyType.String())
-				}
-			default:
-				return llvm.Value{}, errors.New("todo: map lookup key type: " + keyType.String())
+			valueType := expr.Type()
+			if expr.CommaOk {
+				valueType = valueType.(*types.Tuple).At(0).Type()
 			}
+			return c.emitMapLookup(xType.Key(), valueType, value, index, expr.CommaOk)
 		default:
 			panic("unknown lookup type: " + expr.String())
 		}
@@ -2485,9 +2473,7 @@ func (c *Compiler) parseExpr(frame *Frame, expr ssa.Value) (llvm.Value, error) {
 			sliceCap := c.builder.CreateSub(llvmLenInt, low, "slice.cap")
 
 			// This check is optimized away in most cases.
-			if !frame.fn.IsNoBounds() {
-				c.createRuntimeCall("sliceBoundsCheck", []llvm.Value{llvmLen, low, high}, "")
-			}
+			c.emitSliceBoundsCheck(frame, llvmLen, low, high)
 
 			if c.targetData.TypeAllocSize(sliceLen.Type()) > c.targetData.TypeAllocSize(c.lenType) {
 				sliceLen = c.builder.CreateTrunc(sliceLen, c.lenType, "")
@@ -2513,9 +2499,7 @@ func (c *Compiler) parseExpr(frame *Frame, expr ssa.Value) (llvm.Value, error) {
 				high = oldLen
 			}
 
-			if !frame.fn.IsNoBounds() {
-				c.createRuntimeCall("sliceBoundsCheck", []llvm.Value{oldLen, low, high}, "")
-			}
+			c.emitSliceBoundsCheck(frame, oldLen, low, high)
 
 			if c.targetData.TypeAllocSize(low.Type()) > c.targetData.TypeAllocSize(c.lenType) {
 				low = c.builder.CreateTrunc(low, c.lenType, "")
@@ -2538,7 +2522,7 @@ func (c *Compiler) parseExpr(frame *Frame, expr ssa.Value) (llvm.Value, error) {
 			return slice, nil
 
 		case *types.Basic:
-			if typ.Kind() != types.String {
+			if typ.Info()&types.IsString == 0 {
 				return llvm.Value{}, errors.New("unknown slice type: " + typ.String())
 			}
 			// slice a string
@@ -2548,9 +2532,7 @@ func (c *Compiler) parseExpr(frame *Frame, expr ssa.Value) (llvm.Value, error) {
 				high = oldLen
 			}
 
-			if !frame.fn.IsNoBounds() {
-				c.createRuntimeCall("sliceBoundsCheck", []llvm.Value{oldLen, low, high}, "")
-			}
+			c.emitSliceBoundsCheck(frame, oldLen, low, high)
 
 			newPtr := c.builder.CreateGEP(oldPtr, []llvm.Value{low}, "")
 			newLen := c.builder.CreateSub(high, low, "")
@@ -2823,6 +2805,16 @@ func (c *Compiler) parseBinOp(frame *Frame, binop *ssa.BinOp) (llvm.Value, error
 			default:
 				return llvm.Value{}, errors.New("todo: binop on float: " + binop.Op.String())
 			}
+		} else if typ.Info()&types.IsBoolean != 0 {
+			// Operations on booleans
+			switch binop.Op {
+			case token.EQL: // ==
+				return c.builder.CreateICmp(llvm.IntEQ, x, y, ""), nil
+			case token.NEQ: // !=
+				return c.builder.CreateICmp(llvm.IntNE, x, y, ""), nil
+			default:
+				return llvm.Value{}, errors.New("todo: binop on boolean: " + binop.Op.String())
+			}
 		} else if typ.Kind() == types.UnsafePointer {
 			// Operations on pointers
 			switch binop.Op {
@@ -2887,6 +2879,19 @@ func (c *Compiler) parseBinOp(frame *Frame, binop *ssa.BinOp) (llvm.Value, error
 			return c.builder.CreateICmp(llvm.IntNE, x, y, ""), nil
 		default:
 			return llvm.Value{}, errors.New("todo: binop on pointer: " + binop.Op.String())
+		}
+	case *types.Slice:
+		// Slices are in general not comparable, but can be compared against
+		// nil. Assume at least one of them is nil to make the code easier.
+		xPtr := c.builder.CreateExtractValue(x, 0, "")
+		yPtr := c.builder.CreateExtractValue(y, 0, "")
+		switch binop.Op {
+		case token.EQL: // ==
+			return c.builder.CreateICmp(llvm.IntEQ, xPtr, yPtr, ""), nil
+		case token.NEQ: // !=
+			return c.builder.CreateICmp(llvm.IntNE, xPtr, yPtr, ""), nil
+		default:
+			return llvm.Value{}, errors.New("todo: binop on slice: " + binop.Op.String())
 		}
 	default:
 		return llvm.Value{}, errors.New("unknown binop type: " + binop.X.Type().String())
@@ -3086,7 +3091,7 @@ func (c *Compiler) parseConvert(typeFrom, typeTo types.Type, value llvm.Value) (
 		return llvm.Value{}, errors.New("todo: convert: basic non-integer type: " + typeFrom.String() + " -> " + typeTo.String())
 
 	case *types.Slice:
-		if basic, ok := typeFrom.(*types.Basic); !ok || basic.Kind() != types.String {
+		if basic, ok := typeFrom.(*types.Basic); !ok || basic.Info()&types.IsString == 0 {
 			panic("can only convert from a string to a slice")
 		}
 
