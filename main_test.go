@@ -91,11 +91,9 @@ func runTest(path, tmpdir string, target string, t *testing.T) {
 	}
 	stdout := &bytes.Buffer{}
 	cmd.Stdout = stdout
-	if target != "" {
-		cmd.Stderr = os.Stderr
-	}
+	cmd.Stderr = stdout
 	err = cmd.Run()
-	if _, ok := err.(*exec.ExitError); ok && target != "" {
+	if _, ok := err.(*exec.ExitError); ok && target == "qemu" {
 		err = nil // workaround for QEMU
 	}
 
