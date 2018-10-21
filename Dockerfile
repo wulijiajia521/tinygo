@@ -20,6 +20,6 @@ COPY --from=0 /go/bin/tinygo /go/bin/tinygo
 RUN wget -O- https://apt.llvm.org/llvm-snapshot.gpg.key| apt-key add - && \
     echo "deb http://apt.llvm.org/stretch/ llvm-toolchain-stretch-7 main" >> /etc/apt/sources.list && \
     apt-get update && \
-    apt-get install -y libllvm7
+    apt-get install -y libllvm7 lld-7
 
 ENTRYPOINT ["/go/bin/tinygo"]
