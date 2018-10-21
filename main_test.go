@@ -38,17 +38,10 @@ func TestCompiler(t *testing.T) {
 		})
 	}
 
-	t.Log("running tests on the QEMU target...")
+	t.Log("running tests on the qemu target...")
 	for _, path := range matches {
 		t.Run(path, func(t *testing.T) {
 			runTest(path, tmpdir, "qemu", t)
-		})
-	}
-
-	t.Log("running tests on the WebAssembly target...")
-	for _, path := range matches {
-		t.Run(path, func(t *testing.T) {
-			runTest(path, tmpdir, "wasm", t)
 		})
 	}
 }
@@ -91,9 +84,11 @@ func runTest(path, tmpdir string, target string, t *testing.T) {
 	}
 	stdout := &bytes.Buffer{}
 	cmd.Stdout = stdout
-	cmd.Stderr = stdout
+	if target != "" {
+		cmd.Stderr = os.Stderr
+	}
 	err = cmd.Run()
-	if _, ok := err.(*exec.ExitError); ok && target == "qemu" {
+	if _, ok := err.(*exec.ExitError); ok && target != "" {
 		err = nil // workaround for QEMU
 	}
 

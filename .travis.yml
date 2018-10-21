@@ -14,7 +14,6 @@ before_install:
 install:
   - go get github.com/aykevl/go-llvm
   - go get golang.org/x/tools/go/ssa
-  - go get github.com/Xe/olin/cmd/cwa
 
 script:
   - go install github.com/aykevl/tinygo
