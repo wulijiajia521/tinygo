@@ -19,12 +19,12 @@ var ErrCGoWrapper = errors.New("tinygo internal: cgo wrapper") // a signal, not 
 // Ignore these calls (replace with a zero return value) when encountered during
 // interpretation.
 var ignoreInitCalls = map[string]struct{}{
-	"syscall.runtime_envs":   struct{}{},
-	"syscall/js.predefValue": struct{}{},
-	"(syscall/js.Value).Get": struct{}{},
-	"(syscall/js.Value).New": struct{}{},
-	"(syscall/js.Value).Int": struct{}{},
-	"os.init$1":              struct{}{},
+	"syscall.runtime_envs": struct{}{},
+	//"syscall/js.predefValue": struct{}{},
+	//"(syscall/js.Value).Get": struct{}{},
+	//"(syscall/js.Value).New": struct{}{},
+	//"(syscall/js.Value).Int": struct{}{},
+	//"os.init$1":              struct{}{},
 }
 
 // Interpret instructions as far as possible, and drop those instructions from
@@ -112,51 +112,51 @@ func (p *Program) interpret(instrs []ssa.Instruction, paramKeys []*ssa.Parameter
 				}
 				continue
 			}
-			if callee.String() == "os.NewFile" {
-				// Emulate the creation of os.Stdin, os.Stdout and os.Stderr.
-				resultPtrType := callee.Signature.Results().At(0).Type().(*types.Pointer)
-				resultStructOuterType := resultPtrType.Elem().Underlying().(*types.Struct)
-				if resultStructOuterType.NumFields() != 1 {
-					panic("expected 1 field in os.File struct")
-				}
-				fileInnerPtrType := resultStructOuterType.Field(0).Type().(*types.Pointer)
-				fileInnerType := fileInnerPtrType.Elem().(*types.Named)
-				fileInnerStructType := fileInnerType.Underlying().(*types.Struct)
-				fileInner, err := p.getZeroValue(fileInnerType) // os.file
-				if err != nil {
-					return i, err
-				}
-				for fieldIndex := 0; fieldIndex < fileInnerStructType.NumFields(); fieldIndex++ {
-					field := fileInnerStructType.Field(fieldIndex)
-					if field.Name() == "name" {
-						// Set the 'name' field.
-						name, err := p.getValue(common.Args[1], locals)
-						if err != nil {
-							return i, err
-						}
-						fileInner.(*StructValue).Fields[fieldIndex] = name
-					} else if field.Type().String() == "internal/poll.FD" {
-						// Set the file descriptor field.
-						field := field.Type().Underlying().(*types.Struct)
-						for subfieldIndex := 0; subfieldIndex < field.NumFields(); subfieldIndex++ {
-							subfield := field.Field(subfieldIndex)
-							if subfield.Name() == "Sysfd" {
-								sysfd, err := p.getValue(common.Args[0], locals)
-								if err != nil {
-									return i, err
-								}
-								sysfd = &ConstValue{Expr: ssa.NewConst(sysfd.(*ConstValue).Expr.Value, subfield.Type())}
-								fileInner.(*StructValue).Fields[fieldIndex].(*StructValue).Fields[subfieldIndex] = sysfd
-							}
-						}
-					}
-				}
-				fileInnerPtr := &PointerValue{fileInnerPtrType, &fileInner}                                   // *os.file
-				var fileOuter Value = &StructValue{Type: resultPtrType.Elem(), Fields: []Value{fileInnerPtr}} // os.File
-				result := &PointerValue{resultPtrType.Elem(), &fileOuter}                                     // *os.File
-				locals[instr] = result
-				continue
-			}
+			//if callee.String() == "os.NewFile" {
+			//	// Emulate the creation of os.Stdin, os.Stdout and os.Stderr.
+			//	resultPtrType := callee.Signature.Results().At(0).Type().(*types.Pointer)
+			//	resultStructOuterType := resultPtrType.Elem().Underlying().(*types.Struct)
+			//	if resultStructOuterType.NumFields() != 1 {
+			//		panic("expected 1 field in os.File struct")
+			//	}
+			//	fileInnerPtrType := resultStructOuterType.Field(0).Type().(*types.Pointer)
+			//	fileInnerType := fileInnerPtrType.Elem().(*types.Named)
+			//	fileInnerStructType := fileInnerType.Underlying().(*types.Struct)
+			//	fileInner, err := p.getZeroValue(fileInnerType) // os.file
+			//	if err != nil {
+			//		return i, err
+			//	}
+			//	for fieldIndex := 0; fieldIndex < fileInnerStructType.NumFields(); fieldIndex++ {
+			//		field := fileInnerStructType.Field(fieldIndex)
+			//		if field.Name() == "name" {
+			//			// Set the 'name' field.
+			//			name, err := p.getValue(common.Args[1], locals)
+			//			if err != nil {
+			//				return i, err
+			//			}
+			//			fileInner.(*StructValue).Fields[fieldIndex] = name
+			//		} else if field.Type().String() == "internal/poll.FD" {
+			//			// Set the file descriptor field.
+			//			field := field.Type().Underlying().(*types.Struct)
+			//			for subfieldIndex := 0; subfieldIndex < field.NumFields(); subfieldIndex++ {
+			//				subfield := field.Field(subfieldIndex)
+			//				if subfield.Name() == "Sysfd" {
+			//					sysfd, err := p.getValue(common.Args[0], locals)
+			//					if err != nil {
+			//						return i, err
+			//					}
+			//					sysfd = &ConstValue{Expr: ssa.NewConst(sysfd.(*ConstValue).Expr.Value, subfield.Type())}
+			//					fileInner.(*StructValue).Fields[fieldIndex].(*StructValue).Fields[subfieldIndex] = sysfd
+			//				}
+			//			}
+			//		}
+			//	}
+			//	fileInnerPtr := &PointerValue{fileInnerPtrType, &fileInner}                                   // *os.file
+			//	var fileOuter Value = &StructValue{Type: resultPtrType.Elem(), Fields: []Value{fileInnerPtr}} // os.File
+			//	result := &PointerValue{resultPtrType.Elem(), &fileOuter}                                     // *os.File
+			//	locals[instr] = result
+			//	continue
+			//}
 			if canInterpret(callee) {
 				params := make([]Value, len(common.Args))
 				for i, arg := range common.Args {
@@ -184,7 +184,7 @@ func (p *Program) interpret(instrs []ssa.Instruction, paramKeys []*ssa.Parameter
 			if callee.Object() == nil || callee.Object().Name() == "init" {
 				return i, nil // arrived at the init#num functions
 			}
-			return i, errors.New("todo: init call: " + callee.String())
+			return i, nil // errors.New("todo: init call: " + callee.String())
 		case *ssa.ChangeType:
 			x, err := p.getValue(instr.X, locals)
 			if err != nil {

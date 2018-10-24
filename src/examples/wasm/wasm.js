@@ -9,9 +9,12 @@ var memory8;
 const go = new Go();
 var importObject = {
   env: {
-    'syscall/js.valueCall': go.importObject.go['syscall/js.valueCall'],
-    'syscall/js.valueGet': go.importObject.go['syscall/js.valueGet'],
     'syscall/js.stringVal': go.importObject.go['syscall/js.stringVal'],
+    'syscall/js.valueGet': go.importObject.go['syscall/js.valueGet'],
+    'syscall/js.valueCall': go.importObject.go['syscall/js.valueCall'],
+    'syscall/js.valueNew': go.importObject.go['syscall/js.valueNew'],
+    'syscall/js.valuePrepareString': go.importObject.go['syscall/js.valuePrepareString'],
+    'syscall/js.valueLoadString': go.importObject.go['syscall/js.valueLoadString'],
 
     io_get_stdout: function() {
       return 1;
