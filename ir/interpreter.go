@@ -72,20 +72,31 @@ func (p *Program) interpret(instrs []ssa.Instruction, paramKeys []*ssa.Parameter
 			}
 			locals[instr] = &PointerValue{nil, &alloc}
 		case *ssa.BinOp:
+			x, err := p.getValue(instr.X, locals)
+			if err != nil {
+				return i, err
+			}
+			y, err := p.getValue(instr.Y, locals)
+			if err != nil {
+				return i, err
+			}
 			if typ, ok := instr.Type().(*types.Basic); ok && typ.Kind() == types.String {
 				// Concatenate two strings.
 				// This happens in the time package, for example.
-				x, err := p.getValue(instr.X, locals)
-				if err != nil {
-					return i, err
-				}
-				y, err := p.getValue(instr.Y, locals)
-				if err != nil {
-					return i, err
-				}
 				xstr := constant.StringVal(x.(*ConstValue).Expr.Value)
 				ystr := constant.StringVal(y.(*ConstValue).Expr.Value)
 				locals[instr] = &ConstValue{ssa.NewConst(constant.MakeString(xstr+ystr), types.Typ[types.String])}
+			} else if typ, ok := instr.Type().(*types.Basic); ok && typ.Kind() == types.Int64 {
+				switch instr.Op {
+				case token.SUB:
+					// Add two int64 numbers together. Used in the time package in
+					// Go 1.12.
+					lhs, _ := constant.Int64Val(x.(*ConstValue).Expr.Value)
+					rhs, _ := constant.Int64Val(y.(*ConstValue).Expr.Value)
+					locals[instr] = &ConstValue{ssa.NewConst(constant.MakeInt64(lhs-rhs), types.Typ[types.Int64])}
+				default:
+					return i, errors.New("init: unknown basic binop: " + instr.String())
+				}
 			} else {
 				return i, errors.New("init: unknown binop: " + instr.String())
 			}
