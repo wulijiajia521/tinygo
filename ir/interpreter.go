@@ -24,6 +24,7 @@ var ignoreInitCalls = map[string]struct{}{
 	"(syscall/js.Value).Get": struct{}{},
 	"(syscall/js.Value).New": struct{}{},
 	"(syscall/js.Value).Int": struct{}{},
+	"time.runtimeNano":       struct{}{},
 	"os.init$1":              struct{}{},
 }
 
