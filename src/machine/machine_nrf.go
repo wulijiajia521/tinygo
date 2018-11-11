@@ -167,38 +167,36 @@ func (i2c I2C) Configure(config I2CConfig) {
 	i2c.setPins(config.SCL, config.SDA)
 }
 
-// WriteTo writes a slice of data bytes to a peripheral with a specific address.
-func (i2c I2C) WriteTo(address uint8, data []byte) {
+// Start starts an I2C communication session.
+func (i2c I2C) Start(address uint8, write bool) {
 	i2c.Bus.ADDRESS = nrf.RegValue(address)
-	i2c.Bus.TASKS_STARTTX = 1
-	for _, v := range data {
-		i2c.Bus.TXD = nrf.RegValue(v)
-		for i2c.Bus.EVENTS_TXDSENT == 0 {
-		}
-		i2c.Bus.EVENTS_TXDSENT = 0
+	if write {
+		i2c.Bus.TASKS_STARTTX = 1
+	} else {
+		i2c.Bus.TASKS_STARTRX = 1
 	}
+}
 
-	// Assume stop after write.
+// Stop ends an I2C communication session.
+func (i2c I2C) Stop() {
 	i2c.Bus.TASKS_STOP = 1
 	for i2c.Bus.EVENTS_STOPPED == 0 {
 	}
 	i2c.Bus.EVENTS_STOPPED = 0
 }
 
-// ReadFrom reads a slice of data bytes from an I2C peripheral with a specific address.
-func (i2c I2C) ReadFrom(address uint8, data []byte) {
-	i2c.Bus.ADDRESS = nrf.RegValue(address)
-	i2c.Bus.TASKS_STARTRX = 1
-	for i, _ := range data {
-		for i2c.Bus.EVENTS_RXDREADY == 0 {
-		}
-		i2c.Bus.EVENTS_RXDREADY = 0
-		data[i] = byte(i2c.Bus.RXD)
+// WriteByte writes a single byte to the I2C bus.
+func (i2c I2C) WriteByte(data byte) {
+	i2c.Bus.TXD = nrf.RegValue(data)
+	for i2c.Bus.EVENTS_TXDSENT == 0 {
 	}
+	i2c.Bus.EVENTS_TXDSENT = 0
+}
 
-	// Assume stop after read.
-	i2c.Bus.TASKS_STOP = 1
-	for i2c.Bus.EVENTS_STOPPED == 0 {
+// ReadByte reads a single byte from the I2C bus.
+func (i2c I2C) ReadByte() byte {
+	for i2c.Bus.EVENTS_RXDREADY == 0 {
 	}
-	i2c.Bus.EVENTS_STOPPED = 0
+	i2c.Bus.EVENTS_RXDREADY = 0
+	return byte(i2c.Bus.RXD)
 }
